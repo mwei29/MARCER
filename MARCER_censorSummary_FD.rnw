@@ -6,7 +6,7 @@
   \addtolength{\textheight}{1.75in}
 \begin{document}
 
-<<startup, echo=FALSE, message=FALSE, warning=FALSE,>>=
+<<startup, echo=FALSE, message=FALSE, warning=FALSE>>=
 #  Adpated from Jo's censorSummary_FD.rnw for DMCC by Mengzhe Wei on 9/23/24. 
 rm(list=ls());  
 options(warnPartialMatchDollar=TRUE);   # safety option
@@ -15,6 +15,7 @@ library("readxl")
 which.pipeline <- "fmriprep";
 omit.prop <- 0.2;
 fd.thresh <- 0.9;
+fd.thresh2 <- 0.5;
 
 if (which.pipeline == "fmriprep") { 
   MARCER.path <- "/data/MARCER/participantData/fMRIPrep_PREPROCESSED/"; 
@@ -28,7 +29,7 @@ if (which.pipeline == "fmriprep") {
 task.ids <- c("IAPS", "COGED", "NBACK");    # , "IAPS"
 task.ids.short <- c("IAPS1", "IAPS2", "IAPS3", "IAPS4", "COGED1", "COGED2", "COGED3", "NBACK1", "NBACK2")
 run.ids <- c(paste0("task-IAPS_run-", 1:4), paste0("task-COGED_run-", 1:3), paste0("task-NBACK_run-", 1:2));
-demo.path <- "/scratch2/weie/MARCER/"
+demo.path <- "/scratch2/weie/MARCER/MARCERstats/"
 demo <- read_excel(paste0(demo.path,"data_per_participant.xlsx"))
 
 clrs <- c(rep('blue',4),rep( 'forestgreen',3),rep('red',2));
@@ -38,22 +39,24 @@ cx <- 0.7;
 cens.thrs <- c(0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1);
 ind.9 <- which(cens.thrs == fd.thresh);   # store for making cens.tbl
 
-make.plot <- function(do.age) {   # do.age <- "MA"
-  sub.ids <-   demo$sub.id[demo$...3==do.age & demo$Scans==1]
+make.plot <- function(do.age, do.MDD) {   # do.age <- "MA"; do.MDD <- "HC"
+  sub.ids <-   demo$sub.id[demo$...3==do.age & demo$MDD_Status==do.MDD & demo$Scans==1]
   cens.tbl <- data.frame(array(NA, c(length(sub.ids), 2+(length(run.ids)))));  # store proportion censored at FD fd.thresh
   colnames(cens.tbl) <- c("sub.id", paste0(task.ids[1],1:4), 
                           paste0(task.ids[2],1:3), paste0(task.ids[3],1:2), "anyToOmit");
   
-  for (sid in 1:length(sub.ids)) {    # for (sid in 1:5) {    # sid <- 3; 
+  for (sid in 1:length(sub.ids)) {  
+    # for (sid in 1:5) { # sid <- 3;
     cens.tbl$sub.id[sid] <- sub.ids[sid];
     plot(x=0, y=0, xlim=c(min(cens.thrs),max(cens.thrs)), ylim=c(0,0.75), ylab="", xlab="", main="", cex.axis=cx, col='white');
-    mtext(side=3, text=paste0(sub.ids[sid], " (MARCER,",do.age,")"), line=0.1, cex=0.6); 
+    mtext(side=3, text=paste0(sub.ids[sid], " (MARCER,",do.age,do.MDD,")"), line=0.1, cex=0.6); 
     mtext(side=1, text="FD threshold", line=0.9, cex=0.6); 
     mtext(side=2, text="proportion censored", line=0.9, cex=0.6); 
     rect(xleft=fd.thresh, xright=1.3, ybottom=omit.prop, ytop=1, col='cornsilk', border=NA)
     grid(col='darkgrey');
     lines(x=c(-10,20), y=rep(omit.prop,2), col='darkgrey');  # target line
     lines(x=rep(fd.thresh,2), y=c(-1,2), col='darkgrey');  
+    lines(x=rep(fd.thresh2,2),y=c(-1,2), col='darkgrey');
     for (rid in 1:length(run.ids)) {  #rid <-1
         if (which.pipeline == "fmriprep") {
           fname <- paste0(MARCER.path, sub.ids[sid], "/derivatives/fmriprep/sub-", sub.ids[sid], "/ses-1/func/sub-", sub.ids[sid],
@@ -96,44 +99,93 @@ return(cens.tbl);
 \noindent Graphs show what proportion of the frames are marked for censoring at different FD thresholds. The key thresholds of FD 0.9 and 0.2 proportion censored are shown with darker grey lines; any tasks in the beige shaded area should be dropped for too much movement. Empty graphs are people who have not been scanned yet, whose runs have not yet been through preprocessing, or who have missing runs. The proportion censored is listed in a table below the graphs, with a column flagging if the participants has any tasks with so much censoring they need to be omitted. \par
 \vspace{0.3 cm} 
 
-\section*{Middle-Age Adults}
-<<code1, cache=TRUE, dev='pdf', echo=FALSE, fig.height=2.3, fig.width=7.75, fig.align='center'>>= 
+\section*{Middle-Age Healthy Control}
+<<code1, cache=FALSE, dev='pdf', echo=FALSE, fig.height=2.3, fig.width=7.75, fig.align='center'>>= 
 layout(matrix(1:3, c(1,3)));
 par(mar=c(1.75, 1.75, 1.5, 0.75), mgp=c(1.1, 0.2, 0), tcl=-0.3);
 # mar: c(bottom, left, top, right) gives the number of lines of margin to be specified on the four sides of the plot. Default is c(5, 4, 4, 2) + 0.1.
 
-out.tbl <- make.plot("MA");
+out.tbl <- make.plot("MA","HC");
 
 @
 
 \newpage
-<<code1a, echo=FALSE, cache=TRUE, size='small'>>=
+<<code1a, echo=FALSE, cache=FALSE, size='small'>>=
 options(width=100);   # print more columns
 
-print("MARCER Middle-Age Adults proportions", quote=FALSE);
+print("MARCER Middle-Age Adults (HC) proportions", quote=FALSE);
 print(out.tbl);
-
+total_subjects <- length(out.tbl$sub.id)
+omit_subjects <- sum(out.tbl$anyToOmit == "***yes***", na.rm=T)
+print(paste0(omit_subjects,"/",total_subjects," middle-age healthy control have one run >0.2 censored proportion at 0.9 FD."))
 @
 
-
 \newpage
-\section*{MARCER Older Adults}
-<<code2, cache=TRUE, dev='pdf', echo=FALSE, fig.height=2.3, fig.width=7.75, fig.align='center'>>= 
+\section*{MARCER Middle-Age MDD}
+<<code1b, cache=FALSE, dev='pdf', echo=FALSE, fig.height=2.3, fig.width=7.75, fig.align='center'>>= 
 layout(matrix(1:3, c(1,3)));
 par(mar=c(1.75, 1.75, 1.5, 0.75), mgp=c(1.1, 0.2, 0), tcl=-0.3);
 # mar: c(bottom, left, top, right) gives the number of lines of margin to be specified on the four sides of the plot. Default is c(5, 4, 4, 2) + 0.1.
 
-out.tbl <- make.plot("OA");
+out.tbl <- make.plot("MA","MDD");
 
 @
 
 \newpage
-<<code2a, echo=FALSE, cache=TRUE, size='small'>>=
+<<code1c, echo=FALSE, cache=FALSE, size='small'>>=
 options(width=100);   # print more columns
 
-print("MARCER Older Adults proportions", quote=FALSE);
+print("MARCER Middle-Age Adults (MDD) proportions", quote=FALSE);
 print(out.tbl);
+total_subjects <- length(out.tbl$sub.id)
+omit_subjects <- sum(out.tbl$anyToOmit == "***yes***", na.rm=T)
+print(paste0(omit_subjects,"/",total_subjects," middle-age MDDs have one run >0.2 censored proportion at 0.9 FD."))
 
 @
 
+\newpage
+\section*{MARCER Older Healthy Control}
+<<code2, cache=FALSE, dev='pdf', echo=FALSE, fig.height=2.3, fig.width=7.75, fig.align='center'>>= 
+layout(matrix(1:3, c(1,3)));
+par(mar=c(1.75, 1.75, 1.5, 0.75), mgp=c(1.1, 0.2, 0), tcl=-0.3);
+# mar: c(bottom, left, top, right) gives the number of lines of margin to be specified on the four sides of the plot. Default is c(5, 4, 4, 2) + 0.1.
+
+out.tbl <- make.plot("OA","HC");
+
+@
+
+\newpage
+<<code2a, echo=FALSE, cache=FALSE, size='small'>>=
+options(width=100);   # print more columns
+
+print("MARCER Older Adults proportions (HC)", quote=FALSE);
+print(out.tbl);
+total_subjects <- length(out.tbl$sub.id)
+omit_subjects <- sum(out.tbl$anyToOmit == "***yes***", na.rm=T)
+print(paste0(omit_subjects,"/",total_subjects," older ealthy control have one run >0.2 censored proportion at 0.9 FD."))
+
+@
+
+\newpage
+\section*{MARCER Older MDD}
+<<code2b, cache=FALSE, dev='pdf', echo=FALSE, fig.height=2.3, fig.width=7.75, fig.align='center'>>= 
+layout(matrix(1:3, c(1,3)));
+par(mar=c(1.75, 1.75, 1.5, 0.75), mgp=c(1.1, 0.2, 0), tcl=-0.3);
+# mar: c(bottom, left, top, right) gives the number of lines of margin to be specified on the four sides of the plot. Default is c(5, 4, 4, 2) + 0.1.
+
+out.tbl <- make.plot("OA","MDD");
+
+@
+
+\newpage
+<<code2c, echo=FALSE, cache=FALSE, size='small'>>=
+options(width=100);   # print more columns
+
+print("MARCER Older Adults proportions (MDD)", quote=FALSE);
+print(out.tbl);
+total_subjects <- length(out.tbl$sub.id)
+omit_subjects <- sum(out.tbl$anyToOmit == "***yes***", na.rm=T)
+print(paste0(omit_subjects,"/",total_subjects," older MDDs have one run >0.2 censored proportion at 0.9 FD."))
+
+@
 \end{document}
