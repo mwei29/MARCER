@@ -1,0 +1,128 @@
+\documentclass{article}
+  \addtolength{\oddsidemargin}{-1.25in}
+  \addtolength{\evensidemargin}{-1.25in}
+  \addtolength{\textwidth}{2.5in}
+  \addtolength{\topmargin}{-.875in}
+  \addtolength{\textheight}{1.75in}
+\begin{document}
+
+\noindent MARCER \textunderscore\ MovementIAPS3.rnw \par
+\noindent compiled \today\  \par
+\noindent QC movement regressors for MARCER, IAPS3 only.
+\vspace{0.3 cm}
+<<startup, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE>>=
+#  Started by Mengzhe Wei on 10/18/24 to briefly look at the motion of all participants that we currently have. Here we decided to look at IAPS 3. 
+library(RNifti);    # for reading niftis
+library(fields);   # for add.image();
+library(gifti);     # for reading giftis
+library(plot3D);    # for plotting giftis
+
+rm(list=ls());  
+options(warnPartialMatchDollar=TRUE);   # safety option
+library("readxl")
+demo.path <- "/scratch2/weie/MARCER/MARCERstats/"
+demo <- read_excel(paste0(demo.path,"data_per_participant.xlsx"))
+sub.ids <-   demo$sub.id[demo$Scans==1]
+
+afni.path <- "/usr/local/pkg/afni_22/";   # path to the afni function executables (path is for ccplinux1)
+TR <- 1;  # 1 sec TR for all runs
+run.ids <- "task-IAPS_run-3";
+qc.path <- "/scratch2/weie/MARCER/MARCERstats/MotionQCIAPS3/";   # where to write the mean, sd, tsnr images
+pp.path <- "/data/MARCER/participantData/fMRIPrep_PREPROCESSED/";       # top-level path to the fmriprep output files
+
+for (sid in 1:length(sub.ids)) { #sid <- 1
+  in.fname <- paste0(pp.path, sub.ids[sid], "/derivatives/fmriprep/sub-", sub.ids[sid], "/ses-1/func/sub-", sub.ids[sid],
+                     "_ses-1_", run.ids, "_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz");
+  if (!file.exists(in.fname)) {
+    message(paste("Skipping sid:", sub.ids[sid], "- file does not exist:", in.fname))
+    next  # Skip to the next sid
+  } else {
+    tsnr.fname <- paste0(qc.path, sub.ids[sid], "_", run.ids, "_tsnr.nii.gz");
+    if (file.exists(in.fname) & !file.exists(tsnr.fname)) {
+      sd.fname <- paste0(qc.path, sub.ids[sid], "_", run.ids, "_sd.nii.gz");
+      system2(paste0(afni.path, "3dTstat"), args=paste("-stdev -prefix", sd.fname, in.fname), stdout=TRUE);
+      mean.fname <- paste0(qc.path, sub.ids[sid], "_", run.ids, "_mean.nii.gz");
+      system2(paste0(afni.path, "3dTstat"), args=paste("-mean -prefix", mean.fname, in.fname), stdout=TRUE);
+      system2(paste0(afni.path, "3dcalc"), args=paste("-a", mean.fname, "-b", sd.fname, "-expr 'a/b' -prefix", tsnr.fname), stdout=TRUE)
+    }
+  }   
+}
+FD.thr <- 0.9; 
+@
+
+<<checkTrials, eval=FALSE, echo=FALSE, cache=FALSE>>=
+oddities <- c();
+found.oddity <- FALSE;
+
+for (sid in 1:length(sub.ids)) { #sid <- 1     
+  fname <- paste0(pp.path, sub.ids[sid], "/derivatives/fmriprep/sub-", sub.ids[sid], "/ses-1/func/sub-", sub.ids[sid], 
+                  "_ses-1_", run.ids,  "_desc-confounds_timeseries.tsv");
+  
+  if (file.exists(fname)) {
+    in.tbl <- read.delim(fname, na.strings="n/a");
+    if (nrow(in.tbl) != 562) {
+      found.oddity <- TRUE;
+      oddities <- c(oddities, paste0("Found expected duration for subject", sub.ids[sid], "_", run.ids, " (562)? FALSE - Actual duration is ", nrow(in.tbl), "."))
+    } 
+  }
+  if (found.oddity == TRUE) {
+  for (i in 1:length(oddities)) {
+    print(oddities[i]); 
+  }
+  } 
+}
+@
+
+\noindent \textbf{movement regressors} \par
+\noindent Realignment parameters from the \texttt{\textunderscore bold\textunderscore confounds.tsv} files generated during the fmriprep preprocessing. Red x indicate volumes censored at FD\textless \Sexpr{FD.thr} \par
+\vspace{0.2 cm}
+<<code2, echo=FALSE, cache=FALSE, fig.height=3.2, fig.width=7.5, fig.align='center'>>= 
+par(mar=c(0.8, 1, 0.7, 0.5), mgp=c(1.1, 0.2, 0), tcl=-0.3);
+# mar: c(bottom, left, top, right) gives the number of lines of margin on the four sides. Default is c(5, 4, 4, 2) + 0.1.
+
+clrs <- c('cyan', 'blue', 'dodgerblue4', 'violet', 'red', 'darkred');
+fp.names <- c("trans_x", "trans_y", "trans_z", "rot_x", "rot_y", "rot_z");   # x y z roll pitch yaw
+# rotations in radians https://fmriprep.readthedocs.io/en/1.1.0/_modules/fmriprep/workflows/bold/confounds.html
+
+for (sid in 1:length(sub.ids)) { #sid <- 1 
+  fname <- paste0(pp.path, sub.ids[sid], "/derivatives/fmriprep/sub-", sub.ids[sid], "/ses-1/func/sub-", sub.ids[sid], 
+                      "_ses-1_", run.ids,  "_desc-confounds_timeseries.tsv");
+  if (file.exists(fname)) {
+    in.tbl <- read.delim(fname, na.strings="n/a");
+    par(fig=c(0,1,0.45,1), mar=c(0.1, 1.75, 1, 0.75));
+    plot(x=0, y=0, xlim=c(1,nrow(in.tbl)), ylim=c(-2.5,2.5), col='white', ylab="trans. (mm) & rot. (degrees)", xlab="", 
+     main=paste(sub.ids[sid], run.ids), xaxs='i', yaxs='i', xaxt='n', cex.lab=0.7, cex.axis=0.7, cex.main=0.7);
+    for (i in 1:15) { lines(x=rep((i*(60/TR)),2), y=c(-5,5), col='grey', lwd=2); }   # minutes
+    for (i in c(-3, -2, -1, 1, 2, 3)) { lines(x=c(-10,1000), y=rep(i,2), col='darkgrey', lty='dotted'); }   # horizontal lines
+    lines(x=c(-10,1000), y=c(0,0), col='darkgrey');    # 0 line
+    for (i in 6:1) {    # i <- 6;
+      if (i > 3) {       # fmriprep rotations are in radians; convert back to degrees to match HCP rotation units (translation is mm in both)
+        vals <- in.tbl[,fp.names[i]]*(180/pi);
+      } else {
+        vals <- in.tbl[,fp.names[i]];
+      }
+      lines(vals, col=clrs[i]);  
+    }
+    legend('top', legend=fp.names, fill=clrs, horiz=TRUE, cex=0.6, box.col='white', bg='white');
+    box();
+    
+    
+    # FD
+    par(fig=c(0,1,0,0.45), mar=c(1.5, 1.75, 0.1, 0.75), new=TRUE);  # par(fig=c(0,1,0,0.45), mar=c(2, 1.75, 0.1, 0.75), new=TRUE)
+    plot(x=0, y=0, xlim=c(1,nrow(in.tbl)), ylim=c(-0.1,1.3), col='white', ylab="FD (mm)", xlab="", main="", xaxs='i', cex.lab=0.7, cex.axis=0.7);
+    for (i in 1:15) { lines(x=rep((i*(60/TR)),2), y=c(-5,5), col='darkgrey', lwd=2); }   # minutes
+    lines(x=c(-10,1000), y=rep(FD.thr,2), col='red');    # censor line for FD
+    lines(x=c(-10,1000), y=rep(0.5,2), col='darkgrey');   # alternative censor line, for visualization
+    
+    lines(in.tbl$framewise_displacement, col='black');
+    vals <- which(in.tbl$framewise_displacement > FD.thr);   # afni does >, not >=
+    vals0p5 <- which(in.tbl$framewise_displacement > 0.5);  # actual Siegel recommended threshold for adults
+    points(x=vals, y=rep(-0.05,length(vals)), pch=4, col='red');
+    text(x=5, y=1.2, labels=paste0(length(vals), " volumes censored (FD > ", FD.thr, ") [", length(vals0p5), "]"), cex=0.7, pos=4);
+    box();
+    par(new=FALSE);   # reset plotting
+  }
+}
+
+@
+\end{document}
