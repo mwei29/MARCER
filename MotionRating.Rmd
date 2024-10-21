@@ -1,0 +1,73 @@
+---
+title: "MARCER Motion Rating Summary"
+author: "Mengzhe Wei"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: journal
+    toc: yes
+    toc_float:
+      collapsed: true
+---
+
+# MARCER IAPS3 Motion Rating
+Notes: Started 21 Oct 2024 by Mengzhe Wei. Quality control of motion rating in MARCER participants. This is a quick summary only looking at IAPS3 as an example.
+
+_Rating a = low overt and apparent motion._
+
+_Rating b = low overt and high apparent motion._
+
+_Rating c = some overt motion._
+
+_Rating d = high overt motion._
+
+## Set up
+```{r setup0, eval=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
+#basic setup
+rm(list=ls())
+options(warnPartialMatchDollar=TRUE);   # safety option
+library(tidyverse);library("readxl"); #Packages
+in.path <- "C:/Users/Emotion/Documents/GIT-MW/MARCER/" 
+demo <- read_excel(paste0(in.path,"data_per_participant.xlsx"))
+rating <- read_excel(paste0(in.path,"motionRatings.xlsx"), col_names = TRUE, range="A2:B142")
+rating[rating =="NA"] <- NA
+new_rating <- merge(demo[, c("sub.id", "...3", "MDD_Status")], 
+                     rating, 
+                     by.x = "sub.id", 
+                     by.y = "PID", 
+                     all.x = TRUE)
+```
+
+## Summary
+```{r visualization, eval=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
+colnames(new_rating)[colnames(new_rating) == "...3"] <- "Age"
+summary_table_age <- new_rating %>%
+  filter(!is.na(run3)) %>%
+  group_by(Age, run3) %>%
+  summarize(Count = n()) %>%
+  mutate(Total_Count = sum(Count)) 
+
+# View the summary table
+print(summary_table_age)
+ggplot(summary_table_age, aes(x = run3, y = Count, fill = Age)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(x = "Ratings", y = "Count", title = "Count of Ratings by Age Group") +
+  scale_fill_manual(values = c("OA" = "blue", "MA" = "orange")) +  # Replace OA and MA with actual levels if different
+  theme_minimal()
+
+summary_table_MDD <- new_rating %>%
+  filter(!is.na(run3)) %>%
+  group_by(MDD_Status, run3) %>%
+  summarize(Count = n()) %>%
+  mutate(Total_Count = sum(Count)) 
+
+# View the summary table
+print(summary_table_MDD)
+ggplot(summary_table_MDD, aes(x = run3, y = Count, fill = MDD_Status)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  labs(x = "Ratings", y = "Count", title = "Count of Ratings by MDD Group") +
+  scale_fill_manual(values = c("MDD" = "blue", "HC" = "orange")) +  # Replace OA and MA with actual levels if different
+  theme_minimal()
+```
+
+
